@@ -61,6 +61,8 @@ namespace msteams_app_coordinatelogger
                 .AddMvc()
                 .SetCompatibilityVersion(CompatibilityVersion.Version_2_1);
 
+            services.AddControllers(options => options.EnableEndpointRouting = false);
+
         }
 
         /// <summary>
