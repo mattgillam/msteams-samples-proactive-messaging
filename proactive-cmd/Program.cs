@@ -2,6 +2,7 @@
 using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Bot.Builder;
@@ -12,6 +13,11 @@ using Microsoft.Bot.Schema;
 using Microsoft.Bot.Schema.Teams;
 using Polly;
 using Polly.CircuitBreaker;
+
+using AdaptiveCards;
+using AdaptiveCards.Templating;
+using Newtonsoft.Json;
+
 
 namespace Microsoft.Teams.Samples.ProactiveMessageCmd
 {
@@ -173,7 +179,13 @@ namespace Microsoft.Teams.Samples.ProactiveMessageCmd
         /// This method also makes the message appear in the activity feed!
         public static async Task SendToUserAsync(string appId, string appPassword, string serviceUrl, string conversationId, string message)
         {
-            var activity = MessageFactory.Text(message);
+            string[] path = { ".", "resources", "cards", "initialCard.json" };            
+
+            Attachment initialAdaptiveCard = GetFirstOptionsAdaptiveCard(path);
+            //await turnContext.SendActivityAsync(MessageFactory.Attachment(initialAdaptiveCard), cancellationToken);
+            IMessageActivity attachedActivity = MessageFactory.Attachment(initialAdaptiveCard);
+
+            Activity activity = MessageFactory.Text(message);
             activity.Summary = message; // Ensure that the summary text is populated so the toast notifications aren't generic text.
             activity.TeamsNotifyUser(); // Send the message into the activity feed.
 
@@ -182,9 +194,39 @@ namespace Microsoft.Teams.Samples.ProactiveMessageCmd
             var credentials = new MicrosoftAppCredentials(appId, appPassword);
 
             var connectorClient = new ConnectorClient(new Uri(serviceUrl), credentials);
-            await SendWithRetries(async () => 
-                    await connectorClient.Conversations.SendToConversationAsync(conversationId, activity));
+
+            await SendWithRetries(async () =>
+                    await connectorClient.Conversations.SendToConversationAsync(conversationId, (Activity)attachedActivity));
+
+            //https://docs.microsoft.com/en-us/dotnet/api/microsoft.bot.builder.integration.aspnet.core.channelservicecontroller.sendtoconversationasync?view=botbuilder-dotnet-stable
+            //await SendWithRetries(async () => 
+            //        await connectorClient.Conversations.SendToConversationAsync(conversationId, activity));
+
+
+
         }
+
+
+        private static Attachment GetFirstOptionsAdaptiveCard(string[] filepath, string name = null, string userMRI = null)
+        {
+            var adaptiveCardJson = File.ReadAllText(Path.Combine(filepath));
+            AdaptiveCardTemplate template = new AdaptiveCardTemplate(adaptiveCardJson);
+            var payloadData = new
+            {
+                createdById = userMRI,
+                createdBy = name
+            };
+            var cardJsonstring = template.Expand(payloadData);
+            var adaptiveCardAttachment = new Attachment()
+            {
+                ContentType = AdaptiveCard.ContentType,
+                Content = JsonConvert.DeserializeObject(cardJsonstring),
+            };
+
+            return adaptiveCardAttachment;
+        }
+
+
 
         /// Create a new thread in a channel.
         public static async Task CreateChannelThreadAsync(string appId, string appPassword, string serviceUrl, string channelId, string message)
